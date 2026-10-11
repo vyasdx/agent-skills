@@ -8,7 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const test = require('node:test');
-const { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel } = require('./run-evals');
+const { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, stem } = require('./run-evals');
 
 const RUNNER = path.join(__dirname, 'run-evals.js');
 
@@ -200,6 +200,38 @@ test('requires fixtures for execution evals', () => {
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /needs a non-empty files\[\] fixture list/);
+});
+
+test('stem clusters clipped and long forms of one word (#660)', () => {
+  const same = [
+    ['docs', 'doc', 'document', 'documented', 'documentation'],
+    ['auth', 'authenticate', 'authentication'],
+    ['config', 'configs', 'configure', 'configuration', 'configurations'],
+    ['repo', 'repos', 'repository'],
+    ['deps', 'dependency', 'dependencies'],
+    ['spec', 'specs', 'specify', 'specification', 'specifications'],
+    ['verify', 'verifies', 'verification'],
+  ];
+  for (const words of same) {
+    assert.equal(new Set(words.map(stem)).size, 1, `${words.join('/')} -> ${words.map(stem).join('/')}`);
+  }
+  // Short -ation words are not stripped down to a fragment, and "specification"
+  // does not collapse into the unrelated "specific".
+  assert.equal(stem('station'), 'station');
+  assert.equal(stem('relation'), 'relation');
+  assert.notEqual(stem('specification'), stem('specific'));
+});
+
+test('a clipped prompt reaches a description written in the long form (#660)', () => {
+  const root = makeSandbox();
+  writeSkill(root, 'login-skill', 'Hardens authentication. Use when changing authentication for a login flow.');
+  writeSkill(root, 'alpha-skill', 'Handles alpha widgets. Use when changing alpha widgets.');
+  writeJson(path.join(root, 'evals', 'cases', 'login-skill.json'), completeCase('login-skill', 'set up auth', 1));
+  writeJson(path.join(root, 'evals', 'cases', 'alpha-skill.json'), completeCase('alpha-skill', 'change alpha widget'));
+
+  const result = run(root);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
 test('allows dialogue evals without fixtures', () => {

@@ -66,13 +66,35 @@ const STOP = new Set([
   'we', 'when', 'with', 'you', 'your', 'help', 'me', 'i',
 ]);
 
+// Clipped forms people type, mapped onto the stem of the long form, so "auth"
+// meets "authentication" and "docs" meets "documentation" (#660). Tier 2 stands
+// in for a model router, which already knows these are the same word; matching
+// them here keeps descriptions from having to carry both registers.
+const ALIASES = new Map([
+  ['auth', 'authentic'],
+  ['authenticat', 'authentic'],
+  ['config', 'configur'],
+  ['dep', 'dependenci'],
+  ['doc', 'document'],
+  ['repo', 'repositori'],
+  ['spec', 'specifi'],
+]);
+
 function stem(t) {
   // Light suffix stripping so "conflicts"/"conflict", "branching"/"branch",
   // "architectural"/"architecture" cluster together. Not a real stemmer.
-  for (const suf of ['ally', 'ing', 'ed', 'es', 'al']) {
-    if (t.length > suf.length + 3 && t.endsWith(suf)) {
-      t = t.slice(0, -suf.length);
-      break;
+  // "-ation(s)" reduces to the verb's stem: "documentation" -> "document",
+  // "configuration" -> "configur" (as "configure" does). "-ification(s)" meets
+  // "-ify" instead ("verification"/"verify" -> "verifi"), which keeps
+  // "specification" clear of plain "specific".
+  if (/ifications?$/.test(t) && t.length > 10) {
+    t = t.replace(/ications?$/, 'i');
+  } else {
+    for (const suf of ['ations', 'ation', 'ally', 'ing', 'ed', 'es', 'al']) {
+      if (t.length > suf.length + 3 && t.endsWith(suf)) {
+        t = t.slice(0, -suf.length);
+        break;
+      }
     }
   }
   if (t.length > 3 && t.endsWith('s') && !t.endsWith('ss')) t = t.slice(0, -1);
@@ -83,7 +105,7 @@ function stem(t) {
   }
   // Normalize trailing y so "simplify" and "simplifies"/"simplified" cluster.
   if (t.length > 3 && t.endsWith('y')) t = t.slice(0, -1) + 'i';
-  return t;
+  return ALIASES.get(t) || t;
 }
 
 function tokenize(text) {
@@ -665,4 +687,4 @@ function main(args = process.argv.slice(2)) {
 
 if (require.main === module) main();
 
-module.exports = { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel };
+module.exports = { materializeWorkspace, parseGrading, clearGradingSlot, persistGradingOutcome, extractExecutorModel, stem };
